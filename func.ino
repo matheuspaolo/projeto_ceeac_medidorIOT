@@ -41,13 +41,23 @@ void setupWiFi()
   {
     status = WiFi.begin(ssid, pass);
   }
-
-  Serial.println();
-  Serial.println("Conectado");
-
-  IPAddress localIP = WiFi.localIP();
-  Serial.print("IP: ");
-  Serial.println(localIP);
+  
+  for(int i = 0; i < 5; i++){
+    status = WiFi.begin(ssid, pass);
+    if(status == WL_CONNECTED){
+       Serial.println();
+       Serial.println("Conectado");
+      
+       IPAddress localIP = WiFi.localIP();
+       Serial.print("IP: ");
+       Serial.println(localIP);
+    }
+    
+    else{
+      Serial.println("Não conectado");
+    }
+    
+    delay(1000);
 }
 
 void EnviarDados(float tensao, float corrente, float potencia){
