@@ -36,21 +36,16 @@ void setupWiFi()
 
   int status = WL_IDLE_STATUS;
 
-  //Aguarda conectar à rede WiFi
-  while (status != WL_CONNECTED)
-  {
-    status = WiFi.begin(ssid, pass);
-  }
-  
   for(int i = 0; i < 5; i++){
     status = WiFi.begin(ssid, pass);
     if(status == WL_CONNECTED){
-       Serial.println();
-       Serial.println("Conectado");
+      break;
+      Serial.println();
+      Serial.println("Conectado");
       
-       IPAddress localIP = WiFi.localIP();
-       Serial.print("IP: ");
-       Serial.println(localIP);
+      IPAddress localIP = WiFi.localIP();
+      Serial.print("IP: ");
+      Serial.println(localIP);
     }
     
     else{
