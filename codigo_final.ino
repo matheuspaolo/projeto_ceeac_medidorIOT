@@ -1,10 +1,11 @@
-#include <LiquidCrystal.h>
+#include <LiquidCrystal_I2C.h>
 #include <WiFiEsp.h>
 #include "Wire.h"
 #include "EmonLib.h"
 #define DS1307_ADDRESS 0x68
 EnergyMonitor SensorAmp;
 
+String h = "35";
 byte zero = 0x00;
 bool estadoSensor1;
 bool estadoSensor2;
@@ -18,8 +19,10 @@ int minutos;
 int horas;
 int SCT = A0;
 int t;
+int V = 127;
+
 int status;
-LiquidCrystal lcd(12, 11, 5, 4, 3, 2); //define as portas da tela LCD
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Criando um LCD de 16x2 no endereço 0x20
 
 // Configuracao de conexao
 char ssid[] = "CEEAC";
@@ -30,20 +33,19 @@ WiFiEspClient client;
 
 void setup() {
   SensorAmp.current(SCT, 60.606); //Calibracao do sensor de corrente
-  lcd.begin(16, 2);
+  lcd.init();                 // Inicializando o LCD
+  lcd.backlight();            // Ligando o BackLight do LCD
   Serial.begin(115200);
   Serial1.begin(115200);
   Wire.begin();
 
-  pinMode(26, OUTPUT); //saida do rele 1
-  pinMode(27, OUTPUT); //saida do rele 2
-  pinMode(30, INPUT); //entrada do sensor 1
-  pinMode(32, INPUT); //entrada do sensor 2
-  pinMode(34, INPUT); //entrada do sensor 3
-  pinMode(36, INPUT); //entrada do sensor 4
-  pinMode(38, INPUT); //entrada do sensor 5
-  pinMode(40, INPUT); //entrada do sensor 6
-  pinMode(42, INPUT); //entrada do sensor 7
+  pinMode(30, OUTPUT); //saida do rele 1
+  pinMode(31, OUTPUT); //saida do rele 2
+  pinMode(8, INPUT); //entrada do sensor 1
+  pinMode(9, INPUT); //entrada do sensor 2
+  pinMode(10, INPUT); //entrada do sensor 3
+  pinMode(13,OUTPUT);
+  digitalWrite(13,HIGH);
 
   LigarAC(true);
   LigarLampadas(true);
@@ -52,27 +54,28 @@ void setup() {
 }
 void loop() {
 
+
   double Irms = SensorAmp.calcIrms(1480); //Calcula o valor da corrente
 
-  estadoSensor1 = digitalRead(30);
-  estadoSensor2 = digitalRead(32);
-  estadoSensor3 = digitalRead(34);
-  estadoSensor4 = digitalRead(36);
-  estadoSensor5 = digitalRead(38);
-  estadoSensor6 = digitalRead(40);
-  estadoSensor7 = digitalRead(42);
+  estadoSensor1 = digitalRead(8);
+  estadoSensor2 = digitalRead(9);
+  estadoSensor3 = digitalRead(10);
+
 
   lcd.clear();
   lcd.setCursor(0, 0);
 
-  Mostrahoras();
-
-  if (estadoSensor1 || estadoSensor2 || estadoSensor3 || estadoSensor4 || estadoSensor5 || estadoSensor6 || estadoSensor7) {
+  if (estadoSensor1 || estadoSensor2 || estadoSensor3) {
     LigarLampadas(true);
     LigarAC(true);
 
-    lcd.print("Humanos detectados");
-    EnviarTexto("Humanos detectados");
+    lcd.print("Humanos");
+    lcd.setCursor(0, 1);
+    lcd.print("detectados");
+    if (t == 5) {
+      EnviarTexto("Humanos_detectados");
+      EnviarDados(V, Irms);
+    }
   }
 
   else
@@ -83,28 +86,37 @@ void loop() {
     LigarLampadas(false);
     if (horas < 6 || horas > 21) {
       LigarAC(false);
-      EnviarTexto("Ar condicionado desligado.");
-    }
+      if (t == 5) {
+        EnviarTexto("Ar_condicionado_desligado.");
 
-    EnviarTexto("Lâmpadas desligadas.");
+      }
+    }
+    if (t == 5) {
+      EnviarTexto("Nenhum_humano_detectado");
+      EnviarTexto("Lampadas_desligadas");
+      EnviarDados(V, Irms);
+    }
   }
 
-  if (minutos % 15 == 0) {
+
+  // ----------- ENVIAR A CADA 15 MINUTOS ----------------
+  /*if (minutos % 15 == 0) {
     if (status != WL_CONNECTED) {
       setupWiFi();
     }
     if (status == WL_CONNECTED) {
-      EnviarDados(127, Irms, 127 * Irms); // 'a', 'b' e 'c' devem ser float
+      EnviarDados(V, Irms);
     }
-  }
+  }*/
 
   t++;
 
-  if (t == 5) {
-    EnviarTexto("Sistema em funcionamento.");
+  if (t > 5) {
     t = 0;
   }
 
+  Mostrahoras();
+  Serial.println(Irms);
   delay(1000);
 }
 
@@ -113,19 +125,19 @@ void loop() {
 
 void LigarLampadas(bool sn) {
   if (sn) {
-    digitalWrite(26, LOW);
+    digitalWrite(31, LOW);
   }
   else {
-    digitalWrite(26, HIGH);
+    digitalWrite(31, HIGH);
   }
 }
 
 void LigarAC(bool sn) {
   if (sn) {
-    digitalWrite(27, LOW);
+    digitalWrite(30, LOW);
   }
   else {
-    digitalWrite(27, HIGH);
+    digitalWrite(30, HIGH);
   }
 }
 
@@ -160,38 +172,47 @@ void setupWiFi()
   }
 }
 
-void EnviarDados(float tensao, float corrente, float potencia) {
+void EnviarDados(float tensao, float corrente) {
   // Converte os argumentos de inteiros para strings (necessario para realizar o GET)
   String t = String(tensao);
   String c = String(corrente);
   String p = String(tensao * corrente);
-  Serial.println("Inicializando requisicao HTTP.");
+  Serial.println("Inicializando requisicao para envio de valores numericos.");
   if (client.connect(server, 80)) {
     Serial.println("Conectado ao servidor.");
     String url = "/index.php/Inserir/medicao/" + t + "/" + c + "/" + p;
     client.println("GET " + url + " HTTP/1.1");
     client.println("Host: medidor.ceeac.org");
-    client.println("Connection: close");
-    client.println();
-    client.stop();
-  }
-  Serial.println("Requisicao finalizada.");
-}
-
-void EnviarTexto(String msg) {
-  Serial.println("Inicializando requisicao HTTP.");
-  if (client.connect(server, 80)) {
-    Serial.println("Conectado ao servidor.");
-    String url = "/index.php/Inserir/texto/" + msg;
+    client.println("Connection: keep-alive");
+    url = "/index.php/Inserir/texto/" + h + "/";
     client.println("GET " + url + " HTTP/1.1");
     client.println("Host: medidor.ceeac.org");
-    client.println("Connection: close");
+    client.println();
+    client.stop();
+
+
+  }
+  Serial.println("Requisicao finalizada.");
+  Serial.println("");
+}
+
+void EnviarTexto(String numero) {
+  // Converte os argumentos de inteiros para strings (necessario para realizar o GET)
+  //delay(2000);
+  //String mensagem = String(numero);
+  Serial.println("Inicializando requisicao para envio de texto.");
+  if (client.connect(server, 80)) {
+    Serial.println("Conectado ao servidor.");
+    String url = "/index.php/Inserir/texto/" + numero;
+    client.println("GET " + url + " HTTP/1.1");
+    client.println("Host: medidor.ceeac.org");
+    client.println("Connection: keep-alive");
     client.println();
     client.stop();
   }
   Serial.println("Requisicao finalizada.");
+  Serial.println("");
 }
-
 
 // -------------------- FUNÇÕES DO RTC --------------------
 
